@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodeGuard | Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+
+  <style>
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #1e1e2e; }
+    ::-webkit-scrollbar-thumb { background: #4f46e5; border-radius: 10px; }
+    .glass { background: rgba(30, 30, 46, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+    .code-card { transition: all 0.3s ease; }
+    .tab-active { border-bottom: 3px solid #6366f1; color: #6366f1; font-weight: bold; }
+    .input-dark { background: #1a1a24; border: 1px solid #374151; border-radius: 0.75rem; padding: 0.75rem 1rem; outline: none; width: 100%; }
+    .input-dark:focus { border-color: #6366f1; }
+  </style>
+</head>
+<body class="bg-[#0f0f13] text-gray-200 min-h-screen font-sans">
+
+<header class="p-6 glass sticky top-0 z-50 mb-8 border-b border-indigo-500/20">
+  <div class="container mx-auto flex justify-between items-center">
+    <h1 class="text-3xl font-black bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent italic">
+      <i class="fas fa-terminal mr-2"></i>CodeGuard
+    </h1>
+    <div class="flex items-center gap-4">
+      <span class="text-xs font-mono text-indigo-400">DATABASE_CONNECTED</span>
+      <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+    </div>
+  </div>
+</header>
+
+<main class="container mx-auto px-4 pb-12">
+  <div class="grid grid-cols-1 xl:grid-cols-4 gap-8">
+
+    <aside class="xl:col-span-1 space-y-6">
+      <section class="glass p-6 rounded-2xl animate__animated animate__fadeInLeft">
+        <h2 class="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-4">Nova Categoria</h2>
+        <div class="flex gap-2">
+          <input type="text" id="nomeCategoria" placeholder="Ex: Backend" class="input-dark text-sm">
+          <button onclick="criarCategoria()" class="bg-indigo-600 px-4 rounded-xl hover:bg-indigo-500 transition"><i class="fas fa-plus"></i></button>
+        </div>
+      </section>
+
+      <section class="glass p-6 rounded-2xl animate__animated animate__fadeInLeft" style="animation-delay: 0.1s;">
+        <h2 class="text-xs font-bold uppercase tracking-widest text-cyan-400 mb-4">Novo Snippet</h2>
+        <form id="formSnippet" class="space-y-4">
+          <input type="text" id="linguagem" placeholder="Linguagem" required class="input-dark">
+          <select id="selectCategoria" required class="input-dark text-gray-400"></select>
+          <textarea id="codigoIA" rows="5" placeholder="Cole o código aqui..." required class="input-dark font-mono text-xs"></textarea>
+          <button type="submit" class="w-full bg-gradient-to-r from-indigo-600 to-cyan-600 text-white font-bold py-4 rounded-xl shadow-xl active:scale-95 uppercase text-[10px] tracking-widest">
+            Sincronizar no Vault
+          </button>
+        </form>
+      </section>
+    </aside>
+
+    <div class="xl:col-span-3">
+      <div class="flex gap-8 mb-8 border-b border-gray-800 p-2 overflow-x-auto">
+        <button onclick="mudarAba('REVISAO')" id="tab-REVISAO" class="pb-2 transition-all tab-active uppercase text-xs tracking-widest">Em Revisão</button>
+        <button onclick="mudarAba('APROVADO')" id="tab-APROVADO" class="pb-2 transition-all uppercase text-xs tracking-widest text-gray-500">Aprovados</button>
+        <button onclick="mudarAba('RECUSADO')" id="tab-RECUSADO" class="pb-2 transition-all uppercase text-xs tracking-widest text-gray-500">Recusados</button>
+      </div>
+
+      <div id="listaSnippets" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      </div>
+    </div>
+  </div>
+</main>
+
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+<script>
+  const API = "http://localhost:8080/api";
+  let abaAtual = 'REVISAO';
+  let todosSnippets = [];
+
+  function notify(msg, color = "#4f46e5") {
+      Toastify({ text: msg, duration: 3000, gravity: "bottom", position: "right", style: { background: color, borderRadius: "10px" } }).showToast();
+  }
+
+  async function carregarCategorias() {
+      try {
+          const res = await fetch(`http://localhost:8080/categorias`);
+          const categorias = await res.json();
+          const select = document.getElementById('selectCategoria');
+          select.innerHTML = '<option value="">Selecione a Categoria</option>';
+          categorias.forEach(c => select.innerHTML += `<option value="${c.id}">${c.nome}</option>`);
+      } catch (e) { console.error("Erro ao carregar categorias"); }
+  }
+
+  async function carregarSnippets() {
+      try {
+          const res = await fetch(`${API}/Todos`);
+          todosSnippets = await res.json();
+          renderizar();
+      } catch (e) { notify("Falha ao conectar ao servidor", "#ef4444"); }
+  }
+
+  // --- FUNÇÃO CORRIGIDA: ATUALIZAR STATUS E ANÁLISE ---
+  async function processarSnippet(id, novoStatus) {
+      const original = todosSnippets.find(s => s.id === id);
+      const inputAnalise = document.getElementById(`analise-${id}`);
+      const analiseTexto = inputAnalise ? inputAnalise.value : (original.analise || "");
+
+      // Importante: Manter o ID e a Categoria original para não duplicar no banco
+      const payload = {
+          id: original.id,
+          linguagem: original.linguagem,
+          codigoIA: original.codigoIA,
+          analise: analiseTexto,
+          status: novoStatus,
+          categoria: original.categoriaModel
+      };
+
+
+const res = await fetch(`${API}/${id}`, {  // Note o /${id} aqui!
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+});
+
+      if(res.ok) {
+          notify(`Status: ${novoStatus}`, novoStatus === 'APROVADO' ? '#10b981' : '#ef4444');
+          carregarSnippets();
+      } else {
+          notify("Erro ao atualizar", "#ef4444");
+      }
+  }
+
+  async function excluir(id) {
+      if(!confirm("Deseja deletar este snippet?")) return;
+      await fetch(`${API}?id=${id}`, { method: 'DELETE' });
+      notify("Snippet removido", "#374151");
+      carregarSnippets();
+  }
+
+  function renderizar() {
+      const container = document.getElementById('listaSnippets');
+      container.innerHTML = '';
+      const filtrados = todosSnippets.filter(s => s.status === abaAtual);
+
+      if(filtrados.length === 0) {
+          container.innerHTML = '<p class="text-gray-600 italic p-4">Nenhum snippet encontrado.</p>';
+      }
+
+      filtrados.reverse().forEach((s) => {
+          const catNome = s.categoriaModel ? s.categoriaModel.nome : 'GERAL';
+          const isReview = abaAtual === 'REVISAO';
+
+          container.innerHTML += `
+              <div class="glass p-6 rounded-2xl animate__animated animate__fadeInUp">
+                  <div class="flex justify-between items-start mb-4">
+                      <span class="text-[10px] font-black bg-indigo-500/20 text-indigo-400 px-3 py-1 rounded-full border border-indigo-500/30 uppercase">${s.linguagem}</span>
+                      <span class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">${catNome}</span>
+                  </div>
+
+                  <pre class="bg-[#0a0a0e] p-4 rounded-xl text-xs text-cyan-300 overflow-x-auto border border-gray-800 font-mono mb-4"><code>${s.codigoIA}</code></pre>
+
+                  <div class="mb-4">
+                      <p class="text-[10px] uppercase text-indigo-400 font-bold mb-2">Análise do Sistema:</p>
+                      ${isReview ?
+                          `<textarea id="analise-${s.id}" placeholder="Escreva o parecer técnico antes de aprovar..." class="w-full bg-[#0a0a0e] border border-gray-700 rounded-lg p-3 text-xs outline-none focus:border-indigo-500 min-h-[80px]"></textarea>` :
+                          `<div class="bg-indigo-900/10 p-3 rounded-lg border border-indigo-500/10 text-xs text-gray-400 italic">${s.analise || 'Nenhuma análise registrada.'}</div>`
+                      }
+                  </div>
+
+                  <div class="flex gap-2">
+                      ${isReview ? `
+                          <button onclick="processarSnippet(${s.id}, 'APROVADO')" class="flex-1 bg-green-600 hover:bg-green-500 text-white text-[10px] font-bold py-2 rounded-lg transition uppercase">Aprovar</button>
+                          <button onclick="processarSnippet(${s.id}, 'RECUSADO')" class="flex-1 bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold py-2 rounded-lg transition uppercase">Recusar</button>
+                      ` : ''}
+                      <button onclick="excluir(${s.id})" class="p-2 text-gray-600 hover:text-red-500 transition-colors"><i class="fas fa-trash"></i></button>
+                  </div>
+              </div>
+          `;
+      });
+  }
+
+  function mudarAba(status) {
+      abaAtual = status;
+      ['REVISAO', 'APROVADO', 'RECUSADO'].forEach(s => {
+          document.getElementById(`tab-${s}`).className = 'pb-2 transition-all uppercase text-xs tracking-widest text-gray-500';
+      });
+      document.getElementById(`tab-${status}`).className = 'pb-2 transition-all tab-active uppercase text-xs tracking-widest';
+      renderizar();
+  }
+
+  document.getElementById('formSnippet').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+          linguagem: document.getElementById('linguagem').value,
+          codigoIA: document.getElementById('codigoIA').value,
+          status: 'REVISAO',
+          categoria: { id: document.getElementById('selectCategoria').value }
+      };
+
+      const res = await fetch(API, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+      });
+
+      if(res.ok) {
+          notify("🚀 Sincronizado!");
+          e.target.reset();
+          carregarSnippets();
+      }
+  });
+
+  async function criarCategoria() {
+      const val = document.getElementById('nomeCategoria').value;
+      if(!val) return;
+      await fetch('http://localhost:8080/categorias', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ nome: val })
+      });
+      document.getElementById('nomeCategoria').value = '';
+      carregarCategorias();
+      notify("Categoria criada!");
+  }
+
+  // Start
+  carregarCategorias();
+  carregarSnippets();
+</script>
+</body>
+</html>

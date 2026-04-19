@@ -26,4 +26,8 @@ public class SnippetModel {
     @Enumerated(EnumType.STRING)
     private Status status;
 
+    @ManyToOne
+    @JoinColumn(name = "categoria_id")
+    private CategoriaModel categoriaModel;
+
 }

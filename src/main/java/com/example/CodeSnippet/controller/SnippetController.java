@@ -11,38 +11,34 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin
+@CrossOrigin("*")
 public class SnippetController {
 
     private final SnippetService snippetService;
+    private final SnippetRepository snippetRepository;
 
     public SnippetController(SnippetService snippetService, SnippetRepository snippetRepository) {
         this.snippetService = snippetService;
         this.snippetRepository = snippetRepository;
     }
 
-    private final SnippetRepository snippetRepository;
-
     @PostMapping
     public ResponseEntity<SnippetModel> salvar(@RequestBody SnippetDto dto){
         return ResponseEntity.ok(snippetService.salvar(dto));
     }
-
-
 
     @GetMapping("/Todos")
     public ResponseEntity<List<SnippetModel>> todos(){
         return ResponseEntity.ok(snippetRepository.findAll());
     }
 
-    @PutMapping
-    public ResponseEntity<SnippetModel> atualizar (@RequestBody SnippetDto dto) {
-        return ResponseEntity.ok(snippetService.atualizar(dto));
+    @PutMapping("/{id}")
+    public ResponseEntity<SnippetModel> atualizar(@PathVariable Long id, @RequestBody SnippetDto dto) {
+        return ResponseEntity.ok(snippetService.atualizar(id, dto));
     }
 
     @DeleteMapping
     public void deletar(@RequestParam Long id) {
         snippetService.deletarPorId(id);
     }
-
 }
